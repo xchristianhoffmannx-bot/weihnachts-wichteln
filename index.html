@@ -120,9 +120,9 @@ body.is-draw #draw .intro { margin-bottom:6px; }
 <div class="panel-top"></div><div class="panel-inner">
 <div class="section-icon" aria-hidden="true">✉️</div>
 <h2>Dein Wichtelgeheimnis</h2>
-<p class="intro">Wer darf sich auf eine Überraschung von dir freuen? Gib deinen Namen und deinen persönlichen Code ein.</p>
-<label for="me">Dein Name</label>
-<input id="me" type="text" placeholder="Wie heißt du?" autocomplete="off" autocapitalize="words" spellcheck="false">
+<p class="intro">Wer darf sich auf eine Überraschung von dir freuen? Gib deinen Vornamen und deinen persönlichen Code ein.</p>
+<label for="me">Dein Vorname</label>
+<input id="me" type="text" placeholder="z. B. Anna" autocomplete="off" autocapitalize="words" spellcheck="false">
 <label for="code">Dein geheimer Code</label>
 <input id="code" type="text" placeholder="z. B. K7M2QP" autocomplete="off" autocapitalize="characters" spellcheck="false">
 <button id="go" type="button"><span class="primary-icon" aria-hidden="true">🎁</span> Wen beschenke ich?</button>
@@ -141,7 +141,7 @@ body.is-draw #draw .intro { margin-bottom:6px; }
 <p class="intro">Erstelle eure geheime Wichtelrunde. Jeder bekommt genau eine andere Person zugelost – niemand bleibt ohne Geschenk.</p>
 <label for="names">Wer wichtelt mit?</label>
 <textarea id="names" rows="8" placeholder="Anna&#10;Ben&#10;Clara"></textarea>
-<p class="hint">Ein Name pro Zeile · Mindestens 3 Personen</p>
+<p class="hint">Ein Name pro Zeile (Vornamen reichen) · Mindestens 3 Personen</p>
 <button id="create" type="button"><span class="primary-icon" aria-hidden="true">✨</span> Wichtelrunde auslosen</button>
 <div id="out" hidden>
 <div class="divider" aria-hidden="true">✦</div>
@@ -169,7 +169,7 @@ const $ = (id) => document.getElementById(id);
 
 const CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'; // ohne I, L, O, 0, 1
 const CODE_LENGTH = 6;
-const BAD_LOGIN = 'Name oder Code stimmt nicht. Bitte prüfen, sonst beim Organisator nachfragen.';
+const BAD_LOGIN = 'Vorname oder Code stimmt nicht. Bitte so eingeben, wie in deiner Nachricht, sonst beim Organisator nachfragen.';
 
 /* ---------- Hilfsfunktionen ---------- */
 
@@ -424,7 +424,7 @@ function initDraw(data) {
   async function draw() {
     setError('');
     const name = me.value.trim();
-    if (!name || !normCode(code.value)) { setError('Bitte Name und Code eingeben.'); return; }
+    if (!name || !normCode(code.value)) { setError('Bitte Vorname und Code eingeben.'); return; }
     setBusy(true);
     let ok = false;
     try {
