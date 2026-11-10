@@ -330,7 +330,7 @@ function initAdmin() {
         const message = `Weihnachts-Wichteln\nLink: ${link}\nName: ${name}\nCode: ${code}`;
         if (navigator.share) {
           btn.textContent = 'Teilen';
-          btn.addEventListener('click', () => { navigator.share({ title: 'Weihnachts-Wichteln', text: message }).catch(() => {}); });
+          btn.addEventListener('click', () => { navigator.share({ title: 'Weihnachts-Wichteln', text: `Weihnachts-Wichteln\nName: ${name}\nCode: ${code}`, url: link }).catch(() => {}); });
         } else {
           btn.textContent = 'Kopieren';
           btn.addEventListener('click', async () => { if (await copyText(message)) flash(btn, 'Kopiert ✓'); });
