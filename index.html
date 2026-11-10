@@ -140,8 +140,8 @@ body.is-draw #draw .intro { margin-bottom:6px; }
 <h2>Ein bisschen Weihnachtszauber</h2>
 <p class="intro">Erstelle eure geheime Wichtelrunde. Jeder bekommt genau eine andere Person zugelost – niemand bleibt ohne Geschenk.</p>
 <label for="names">Wer wichtelt mit?</label>
-<textarea id="names" rows="8" placeholder="Anna&#10;Ben&#10;Clara"></textarea>
-<p class="hint">Ein Name pro Zeile (Vornamen reichen) · Mindestens 3 Personen</p>
+<textarea id="names" rows="8" placeholder="Anna + Ben&#10;Clara&#10;Dieter + Eva&#10;Frank"></textarea>
+<p class="hint">Ein Name pro Zeile (Vornamen reichen). Paare mit + verbinden, z. B. „Anna + Ben“: Sie ziehen einander nicht. Jeder bekommt trotzdem einen eigenen Code. Mindestens 3 Personen.</p>
 <button id="create" type="button"><span class="primary-icon" aria-hidden="true">✨</span> Wichtelrunde auslosen</button>
 <div id="out" hidden>
 <div class="divider" aria-hidden="true">✦</div>
@@ -216,8 +216,14 @@ function makeCode() {
   return c;
 }
 
-function parseNames(text) {
-  const names = text.split(/[\n;,]+/).map((n) => n.trim().replace(/\s+/g, ' ')).filter(Boolean);
+// Eine Zeile = ein Eintrag. "Anna + Ben" verbindet Personen zu einem Paar bzw. einer Gruppe:
+// Sie ziehen einander nicht. Jede Person bleibt trotzdem ein eigener Teilnehmer mit eigenem Code.
+function parseEntries(text) {
+  const entries = text
+    .split(/[\n;,]+/)
+    .map((e) => e.split('+').map((n) => n.trim().replace(/\s+/g, ' ')).filter(Boolean))
+    .filter((g) => g.length > 0);
+  const names = entries.flat();
   if (names.length < 3) throw new Error('Mindestens 3 Namen nötig.');
   const seen = new Set();
   for (const n of names) {
@@ -225,7 +231,11 @@ function parseNames(text) {
     if (seen.has(k)) throw new Error(`Name doppelt: ${n}. Bei gleichen Namen z. B. Nachnamen-Initiale ergänzen.`);
     seen.add(k);
   }
-  return names;
+  return { names, groups: entries.filter((g) => g.length > 1) };
+}
+
+function parseNames(text) {
+  return parseEntries(text).names;
 }
 
 /* ---------- Kryptografie ---------- */
@@ -267,8 +277,24 @@ async function openEntry(entry, name, code) {
 // Zufälliger Ring: jede Person beschenkt die nächste im gemischten Ring.
 // Garantiert: niemand zieht sich selbst, jeder wird genau einmal gezogen,
 // und es gibt nie eine Sackgasse am Ende.
-async function buildPayload(names) {
-  const ring = shuffle(names);
+// Mit Paaren/Gruppen: Ringe, in denen zwei Mitglieder derselben Gruppe nebeneinander stehen,
+// werden verworfen und neu gemischt. Bei 9 Personen mit 3 Paaren sind rund 44 % aller Ringe gültig.
+function findRing(names, groups) {
+  const groupOf = new Map();
+  groups.forEach((g, i) => g.forEach((n) => groupOf.set(n, i)));
+  for (let attempt = 0; attempt < 5000; attempt++) {
+    const ring = shuffle(names);
+    const valid = ring.every((n, i) => {
+      const g = groupOf.get(n);
+      return g === undefined || g !== groupOf.get(ring[(i + 1) % ring.length]);
+    });
+    if (valid) return ring;
+  }
+  throw new Error('Mit diesen Paaren geht die Auslosung nicht auf. Die Runde ist zu klein oder zu viele Personen stehen in Paaren bzw. Gruppen.');
+}
+
+async function buildPayload(names, groups = []) {
+  const ring = findRing(names, groups);
   const codes = names.map((name) => ({ name, code: makeCode() }));
   const codeOf = new Map(codes.map((c) => [c.name, c.code]));
   const entries = await Promise.all(
@@ -308,8 +334,8 @@ function initAdmin() {
     setError('');
     $('out').hidden = true;
     try {
-      const names = parseNames($('names').value);
-      const { payload, codes } = await buildPayload(names);
+      const { names, groups } = parseEntries($('names').value);
+      const { payload, codes } = await buildPayload(names, groups);
       const link = location.href.split('#')[0] + '#d=' + toB64Url(enc.encode(JSON.stringify(payload)));
       $('link').value = link;
       $('count').textContent = String(names.length);
