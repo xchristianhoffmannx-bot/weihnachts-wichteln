@@ -146,12 +146,12 @@ body.is-draw #draw .intro { margin-bottom:6px; }
 <div id="out" hidden>
 <div class="divider" aria-hidden="true">✦</div>
 <h3 class="step-title"><span class="step-number">1</span> Euer Wichtel-Link</h3>
-<p class="copy-description"><strong id="count"></strong> Personen sind dabei! Diesen Link kannst du mit allen teilen.</p>
+<p class="copy-description"><strong id="count"></strong> Personen sind dabei! Dieser Link ist für alle gleich, wer ihn nutzt, tippt Name und Code selbst ein.</p>
 <textarea id="link" rows="3" readonly aria-label="Wichtel-Link"></textarea>
 <div class="row"><button id="copy" type="button">Link kopieren</button><button id="share" type="button" class="secondary" hidden>Teilen</button></div>
 <div class="divider" aria-hidden="true">✦</div>
 <h3 class="step-title"><span class="step-number">2</span> Geheime Wichtel-Codes</h3>
-<p class="copy-description"><strong>Jeden Code einzeln und privat verschicken.</strong> Die Codes sind nur jetzt sichtbar. Bitte die Seite nicht schließen oder neu laden, bevor alle Codes verteilt sind.</p>
+<p class="copy-description"><strong>Jeden Button einzeln und privat verschicken.</strong> Der Link enthält Name und Code schon, die Person tippt dann nur noch auf „Wen beschenke ich?“. Nicht weiterleiten, dieser Link ist das Geheimnis. Die Codes sind nur jetzt sichtbar: Seite nicht schließen oder neu laden, bevor alle verschickt sind.</p>
 <ul id="codes" class="codes"></ul>
 <button id="copyall" type="button" class="secondary">Alle Codes kopieren</button>
 <p class="hint hint-note">🔐 Falls ein Code verloren geht, musst du die Auslosung neu erstellen und allen einen neuen Link und neue Codes schicken.</p>
@@ -353,10 +353,12 @@ function initAdmin() {
         const btn = document.createElement('button');
         btn.type = 'button';
         btn.className = 'small secondary';
-        const message = `Weihnachts-Wichteln\nLink: ${link}\nName: ${name}\nCode: ${code}`;
+        // Persönlicher Link: Name und Code stehen im Teil nach dem #, werden also nie an einen Server gesendet.
+        const personalLink = `${link}&n=${encodeURIComponent(name)}&c=${code}`;
+        const message = `Weihnachts-Wichteln\nDein Link: ${personalLink}\nName: ${name}\nCode: ${code}`;
         if (navigator.share) {
           btn.textContent = 'Teilen';
-          btn.addEventListener('click', () => { navigator.share({ title: 'Weihnachts-Wichteln', text: `Weihnachts-Wichteln\nName: ${name}\nCode: ${code}`, url: link }).catch(() => {}); });
+          btn.addEventListener('click', () => { navigator.share({ title: 'Weihnachts-Wichteln', text: `Weihnachts-Wichteln\nName: ${name}\nCode: ${code}`, url: personalLink }).catch(() => {}); });
         } else {
           btn.textContent = 'Kopieren';
           btn.addEventListener('click', async () => { if (await copyText(message)) flash(btn, 'Kopiert ✓'); });
@@ -386,11 +388,13 @@ function initAdmin() {
   }
 }
 
-function initDraw(data) {
+function initDraw(data, prefill = { name: '', code: '' }) {
   $('draw').hidden = false;
   document.body.classList.add('is-draw'); // kompaktes Layout, damit der Button ohne Scrollen sichtbar ist
   const me = $('me');
   const code = $('code');
+  me.value = prefill.name;
+  code.value = prefill.code;
   const reduceMotion = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   // Name einblenden und kleinen Funkelregen auslösen
@@ -499,12 +503,15 @@ function initSnow() {
 }
 
 function init() {
-  const m =location.hash.match(/^#d=([\w-]+)$/);
+  const m = location.hash.match(/^#d=([\w-]+)(?:&(.*))?$/);
   if (!m) { initAdmin(); return; }
   try {
     const data = JSON.parse(dec.decode(fromB64Url(m[1])));
     if (data.v !== 2 || !Array.isArray(data.e)) throw new Error('Format');
-    initDraw(data);
+    const extra = new URLSearchParams(m[2] || '');
+    initDraw(data, { name: extra.get('n') || '', code: extra.get('c') || '' });
+    // Name und Code aus der Adresszeile entfernen (nur Schutz vor neugierigen Blicken, der Link selbst bleibt geheim zu halten)
+    if (m[2]) history.replaceState(null, '', location.pathname + location.search + '#d=' + m[1]);
   } catch {
     setError('Der Link ist beschädigt oder unvollständig. Bitte beim Organisator einen neuen anfragen.');
   }
