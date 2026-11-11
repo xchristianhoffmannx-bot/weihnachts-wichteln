@@ -5,6 +5,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
 <meta name="theme-color" content="#102d27">
+<meta name="description" content="Tippe auf den Link, um zu sehen, wen du beschenkst.">
+<meta property="og:type" content="website">
+<meta property="og:locale" content="de_DE">
+<meta property="og:title" content="Weihnachts-Wichteln · Ein kleines Weihnachtsgeheimnis">
+<meta property="og:description" content="Tippe auf den Link, um zu sehen, wen du beschenkst.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E🎄%3C/text%3E%3C/svg%3E">
 <title>Weihnachts-Wichteln · Ein kleines Weihnachtsgeheimnis</title>
 <style>
@@ -146,7 +151,7 @@ body.is-draw #draw .intro { margin-bottom:6px; }
 <div id="out" hidden>
 <div class="divider" aria-hidden="true">✦</div>
 <h3 class="step-title"><span class="step-number">1</span> Euer Wichtel-Link</h3>
-<p class="copy-description"><strong id="count"></strong> Personen sind dabei! Dieser Link ist für alle gleich, wer ihn nutzt, tippt Name und Code selbst ein.</p>
+<p class="copy-description"><strong id="count"></strong> Personen sind dabei! Gruppen-Link (lang, nur als Notlösung): Wer ihn nutzt, tippt Name und Code selbst ein. Besser sind die persönlichen Links unten.</p>
 <textarea id="link" rows="3" readonly aria-label="Wichtel-Link"></textarea>
 <div class="row"><button id="copy" type="button">Link kopieren</button><button id="share" type="button" class="secondary" hidden>Teilen</button></div>
 <div class="divider" aria-hidden="true">✦</div>
@@ -266,6 +271,20 @@ async function seal(giver, code, receiver) {
   return { i: await nameId(giver), s: toB64Url(salt), v: toB64Url(iv), c: toB64Url(c) };
 }
 
+// Kompakter Einzel-Eintrag für persönliche Links: Salt (16) + IV (12) + Chiffrat in einem Base64url-String
+function packEntry(e) {
+  const s = fromB64Url(e.s), v = fromB64Url(e.v), c = fromB64Url(e.c);
+  const out = new Uint8Array(s.length + v.length + c.length);
+  out.set(s, 0); out.set(v, 16); out.set(c, 28);
+  return toB64Url(out);
+}
+
+function unpackEntry(str) {
+  const b = fromB64Url(str);
+  if (b.length < 28 + 17) throw new Error('Format');
+  return { s: toB64Url(b.slice(0, 16)), v: toB64Url(b.slice(16, 28)), c: toB64Url(b.slice(28)) };
+}
+
 async function openEntry(entry, name, code) {
   const key = await deriveKey(name, code, fromB64Url(entry.s));
   const plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: fromB64Url(entry.v) }, key, fromB64Url(entry.c));
@@ -300,6 +319,7 @@ async function buildPayload(names, groups = []) {
   const entries = await Promise.all(
     ring.map((giver, i) => seal(giver, codeOf.get(giver), ring[(i + 1) % ring.length]))
   );
+  ring.forEach((giver, i) => { codes.find((c) => c.name === giver).packed = packEntry(entries[i]); });
   return {
     payload: { v: 2, e: shuffle(entries) }, // gemischt, damit die Reihenfolge den Ring nicht verrät
     codes,
@@ -342,7 +362,7 @@ function initAdmin() {
 
       const list = $('codes');
       list.textContent = '';
-      for (const { name, code } of codes) {
+      for (const { name, code, packed } of codes) {
         const li = document.createElement('li');
         const who = document.createElement('div');
         who.className = 'who';
@@ -354,7 +374,7 @@ function initAdmin() {
         btn.type = 'button';
         btn.className = 'small secondary';
         // Persönlicher Link: Name und Code stehen im Teil nach dem #, werden also nie an einen Server gesendet.
-        const personalLink = `${link}&n=${encodeURIComponent(name)}&c=${code}`;
+        const personalLink = `${location.href.split('#')[0]}#p=${packed}&n=${encodeURIComponent(name)}&c=${code}`;
         const message = `Weihnachts-Wichteln\nDein Link: ${personalLink}\nName: ${name}\nCode: ${code}`;
         if (navigator.share) {
           btn.textContent = 'Teilen';
@@ -459,7 +479,7 @@ function initDraw(data, prefill = { name: '', code: '' }) {
     let ok = false;
     try {
       const id = await nameId(name);
-      const entry = data.e.find((x) => x.i === id);
+      const entry = data.e.length === 1 && !data.e[0].i ? data.e[0] : data.e.find((x) => x.i === id);
       if (!entry) { setError(BAD_LOGIN); return; }
       const target = await openEntry(entry, name, code.value); // wirft bei falschem Code
       ok = true;
@@ -503,15 +523,20 @@ function initSnow() {
 }
 
 function init() {
-  const m = location.hash.match(/^#d=([\w-]+)(?:&(.*))?$/);
+  const m = location.hash.match(/^#([dp])=([\w-]+)(?:&(.*))?$/);
   if (!m) { initAdmin(); return; }
   try {
-    const data = JSON.parse(dec.decode(fromB64Url(m[1])));
-    if (data.v !== 2 || !Array.isArray(data.e)) throw new Error('Format');
-    const extra = new URLSearchParams(m[2] || '');
+    let data;
+    if (m[1] === 'p') {
+      data = { v: 2, e: [unpackEntry(m[2])] }; // persönlicher Link: nur der eigene Eintrag
+    } else {
+      data = JSON.parse(dec.decode(fromB64Url(m[2])));
+      if (data.v !== 2 || !Array.isArray(data.e)) throw new Error('Format');
+    }
+    const extra = new URLSearchParams(m[3] || '');
     initDraw(data, { name: extra.get('n') || '', code: extra.get('c') || '' });
     // Name und Code aus der Adresszeile entfernen (nur Schutz vor neugierigen Blicken, der Link selbst bleibt geheim zu halten)
-    if (m[2]) history.replaceState(null, '', location.pathname + location.search + '#d=' + m[1]);
+    if (m[3]) history.replaceState(null, '', location.pathname + location.search + '#' + m[1] + '=' + m[2]);
   } catch {
     setError('Der Link ist beschädigt oder unvollständig. Bitte beim Organisator einen neuen anfragen.');
   }
